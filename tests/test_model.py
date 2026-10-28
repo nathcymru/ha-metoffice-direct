@@ -238,3 +238,48 @@ def test_bpf_cf_wind_units_from_advertised_metadata_are_supported_without_overri
     payload["parameters"] = {"windSpeed10m": {"unit": {"symbol": "knots"}}}
     with pytest.raises(ValueError, match="unit"):
         parse_bpf(payload, metadata)
+
+
+def bpf_string_percentile_payload(percentiles, values):
+    return {
+        "parameters": {},
+        "coverages": [
+            {
+                "domain": {
+                    "axes": {
+                        "locationId": {"values": ["synthetic-site"]},
+                        "percentiles": {"values": percentiles},
+                        "t": {"values": [NOW.isoformat()]},
+                        "x": {"values": [0]},
+                        "y": {"values": [0]},
+                        "z": {"values": [0]},
+                    }
+                },
+                "ranges": {
+                    "windSpeed10m": {
+                        "axisNames": ["percentiles", "t"],
+                        "shape": [len(percentiles), 1],
+                        "values": values,
+                    }
+                },
+            }
+        ],
+    }
+
+
+def test_live_bpf_string_percentile_axis_selects_median_using_advertised_units():
+    metadata = {"windSpeed10m": {"unit": {"symbol": "m s-1"}}}
+    payload = bpf_string_percentile_payload(["10", "50", "90"], [1, 2.5, 5])
+    assert parse_bpf(payload, metadata)["rows"] == [{"time": NOW.isoformat(), "windSpeed10m": 2.5}]
+    payload = bpf_string_percentile_payload(["50"], ["2.5"])
+    with pytest.raises(ValueError, match="No supported BPF values"):
+        parse_bpf(payload, metadata)
+
+
+@pytest.mark.parametrize(
+    "coordinates", [["NaN"], ["Infinity"], [True], ["-1", "50"], ["101", "50"], ["50", 50], ["50%"]]
+)
+def test_bpf_percentile_metadata_rejects_invalid_or_ambiguous_coordinates(coordinates):
+    metadata = {"windSpeed10m": {"unit": {"symbol": "m s-1"}}}
+    with pytest.raises(ValueError, match="percentile|median"):
+        parse_bpf(bpf_string_percentile_payload(coordinates, [1] * len(coordinates)), metadata)

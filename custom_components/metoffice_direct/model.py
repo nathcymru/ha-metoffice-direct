@@ -376,9 +376,19 @@ def parse_bpf(payload, parameter_metadata=None):
                 if name == "t":
                     continue
                 if "percentile" in name.lower():
-                    matches = [i for i, v in enumerate(axis) if number(v) == 50]
-                    if not matches:
-                        raise ValueError("BPF median unavailable")
+                    # CoverageJSON encodes these metadata coordinates as numeric
+                    # strings in the live API. Weather values still use strict number().
+                    try:
+                        coordinates = [
+                            number(float(v)) if isinstance(v, str) else number(v) for v in axis
+                        ]
+                    except ValueError:
+                        raise ValueError("Invalid BPF percentile coordinates") from None
+                    if any(v is None or not 0 <= v <= 100 for v in coordinates):
+                        raise ValueError("Invalid BPF percentile coordinates")
+                    matches = [i for i, v in enumerate(coordinates) if v == 50]
+                    if len(matches) != 1:
+                        raise ValueError("BPF median unavailable or ambiguous")
                     indices[name] = matches[0]
                 elif size == 1:
                     indices[name] = 0

@@ -10,8 +10,8 @@ from test_api import Response
 from test_homeassistant import entry
 
 from custom_components.metoffice_direct.api import Client, StateStore, utcnow
-from custom_components.metoffice_direct.coordinator import ProviderCoordinator
-from custom_components.metoffice_direct.maps import MapCoordinator
+from custom_components.metoffice_direct.coordinator import BPF_PARSER_REVISION, ProviderCoordinator
+from custom_components.metoffice_direct.maps import MAP_VALIDATION_VERSION, MapCoordinator
 
 
 @pytest.mark.asyncio
@@ -31,6 +31,10 @@ async def test_new_parser_one_retry_persists_across_restart_without_resetting_bu
             "blocked_until": until,
         }
         await store.save_cache("attempt_" + product, now.isoformat())
+        await store.save_cache(
+            "bpf_attempt_parser_revision" if product == "bpf" else "map_attempt_validation_version",
+            BPF_PARSER_REVISION - 1 if product == "bpf" else MAP_VALIDATION_VERSION - 1,
+        )
         session = SimpleNamespace(get=Mock(return_value=Response(400)))
         client = Client(session, store, {product: "SYNTHETIC_SECRET"})
         config = {

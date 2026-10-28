@@ -2,12 +2,12 @@
 
 Validated using Python 3.14.10 and real Home Assistant Core 2026.10.4.
 
-- 101 tests passed (`python -m pytest`).
+- 109 tests passed (`python -m pytest`).
 - Ruff checks and formatting passed across all 22 Python files.
 - Python compilation passed.
 - Independent review fixes included stale daily model runs, unknown warning geography, queued requests following HTTP 401, corrupt/empty persistent quota ledgers, exact map precipitation-rate identifiers, and consistent map geographic metadata.
 - Real HA tests cover YAML `!secret` resolution and config-entry setup shape, empty persisted entry data, native metric/US weather conversion, availability, the HTTP authentication gate (anonymous 401, authenticated image response), withdrawn-frame rejection and unloaded runtime access.
-- Synthetic transport tests cover quota persistence/restart, failed disk writes, 429 backoff, one-time parser upgrade retries without changing budgets/backoff, missing values, warning timing/geometry, named BPF instances, CF units, authenticated bounded capability inspection, image-cache bounds, actual thin map catalog shapes, and provider model-run/geography changes. Interrupted PNG or verification failures discard unpublished files, including restart recovery.
+- Synthetic transport tests cover quota persistence/restart, failed disk writes, 429 backoff, one-time parser upgrade retries without changing budgets/backoff, missing values, warning timing/geometry, named BPF instances, string percentile coordinates with strict weather values, CF units, authenticated bounded capability inspection, image-cache bounds, actual thin map catalog shapes, and provider model-run/geography changes. Interrupted PNG or verification failures discard unpublished files, including restart recovery.
 - The map cold-start regression verifies 52 requests for 25 frames and five requests for the next hourly slide with 24 reused PNGs. Primary weather setup completes while an optional map refresh remains blocked.
 
 The test suite emits an upstream aiohttp/Home Assistant application subclass deprecation warning and an aiohttp request-key warning in the real HA authentication regression. No provider credentials, authenticated provider responses, official evaluation samples, or private installation coordinates are included in the repository.

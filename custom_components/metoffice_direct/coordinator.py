@@ -19,7 +19,7 @@ from .model import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-BPF_PARSER_REVISION = 1
+BPF_PARSER_REVISION = 2
 
 
 class ProviderCoordinator(DataUpdateCoordinator):
