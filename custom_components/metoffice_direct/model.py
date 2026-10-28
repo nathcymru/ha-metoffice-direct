@@ -245,11 +245,14 @@ def warning_summary(payload, now, latitude, longitude, regions):
             continue
         previous = latest.get(str(identifier))
         if previous is not None and previous != feature:
-            issued = timestamp(props.get("issuedDate"))
-            prior_issued = timestamp(previous.get("properties", {}).get("issuedDate"))
-            if issued is None or prior_issued is None or issued == prior_issued:
+            # Updated/cancelled snapshots preserve issuedDate. modifiedDate is
+            # the provider's ordering timestamp when supplied.
+            changed = timestamp(props.get("modifiedDate", props.get("issuedDate")))
+            prior = previous.get("properties", {})
+            prior_changed = timestamp(prior.get("modifiedDate", prior.get("issuedDate")))
+            if changed is None or prior_changed is None or changed == prior_changed:
                 raise ValueError("Conflicting warning versions have no ordering timestamp")
-            if issued < prior_issued:
+            if changed < prior_changed:
                 continue
         latest[str(identifier)] = feature
     for feature in [*latest.values(), *anonymous]:
@@ -306,6 +309,9 @@ def warning_summary(payload, now, latitude, longitude, regions):
                 "valid_from": start.isoformat(),
                 "valid_to": end.isoformat(),
                 "issued": props.get("issuedDate"),
+                "modified": props.get("modifiedDate"),
+                "status": props.get("warningStatus"),
+                "update_description": props.get("warningUpdateDescription"),
                 "active": start <= now < end,
                 "impact": number(props.get("warningImpact")),
                 "likelihood": number(props.get("warningLikelihood")),
@@ -313,7 +319,7 @@ def warning_summary(payload, now, latitude, longitude, regions):
                 "filter_method": method,
                 "what_to_expect": props.get("whatToExpect", []),
                 "what_to_do": props.get("whatShouldIDo", []),
-                "details": props.get("furtherDetails", ""),
+                "details": props.get("warningFurtherDetails", props.get("furtherDetails", "")),
             }
         )
     # Malformed warnings are never silently transformed into a confident empty list.

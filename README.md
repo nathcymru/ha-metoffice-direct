@@ -42,7 +42,7 @@ Current point data expires after two hours, station data after three hours, and 
 
 Warning sensors have a `warnings` attribute containing `id`, `version`, `level`, `headline`, `weather_types`, `valid_from`, `valid_to`, `issued`, `active`, `impact`, `likelihood`, `areas`, `filter_method`, `what_to_expect`, `what_to_do`, and `details`. Levels are `none`, `yellow`, `amber`, `red`; failed or stale data is unavailable, never a confident `none`. Duplicate IDs use the newest issuance timestamp; ambiguous conflicting versions fail validation.
 
-Selection uses the configured home's position within warning polygons, including boundaries and respecting holes. Configured regions are a labelled fallback only when geometry cannot be evaluated. Start and expiry are reevaluated locally every minute. The Atom feed is polled every 15 minutes and the snapshot is downloaded only when its URL changes. Warning information can therefore lag a new issuance by the polling interval; consult the official Met Office warning service for safety decisions.
+Selection uses the configured home's position within warning polygons, including boundaries and respecting holes. Configured regions are a labelled fallback only when geometry cannot be evaluated. Start and expiry are reevaluated locally every minute. The Atom feed is polled every minute and the snapshot is downloaded only when its URL changes. Data expires after ten minutes without a successful refresh; request failures immediately mark it unavailable. This cadence follows the [NSWWS developer presentation guide](https://www.metoffice.gov.uk/api/assets/file/03115NSWWSStyleGuideupdate_v5pdf). Provider availability, network failure and rate-limit backoff can delay delivery; consult the official Met Office warning service for safety decisions.
 
 ## Precipitation playback
 
@@ -71,7 +71,7 @@ A cold 25-frame load uses 52 requests: one catalog, 25 file metadata, 25 PNGs an
 | --- | --- | ---: |
 | Global Spot | Hourly series every 20 min; daily and three-hourly series every hour | 330 shared calls |
 | BPF v2 | Selected UK percentile series every 2 hours, including discovery/instance requests | 50 shared calls |
-| Warnings | Feed every 15 minutes; changed snapshots only | 19,000 calls |
+| Warnings | Feed every minute; changed snapshots only | 19,000 calls |
 | Land Observations | Selected station every 15 minutes; station discovery cached | 330 calls |
 | Map Images | One order hourly; missing frames only; metadata recheck when images change | 900 calls |
 | Atmospheric | No automatic download | No consumption |

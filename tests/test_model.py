@@ -161,6 +161,58 @@ def test_warning_future_active_and_expiry_evaluate_against_now():
     assert warning_summary(payload, NOW + timedelta(hours=3), 53, -3.8, [])["level"] == "none"
 
 
+def test_warning_keeps_full_advice_and_issued_update_metadata():
+    feature = warning(NOW, NOW + timedelta(hours=1))
+    long_advice = "Synthetic full advice. " * 250
+    feature["properties"].update(
+        {
+            "warningFurtherDetails": long_advice,
+            "furtherDetails": "Legacy alternate field",
+            "whatToExpect": [long_advice],
+            "whatShouldIDo": long_advice,
+            "warningVersion": "2",
+            "issuedDate": NOW.isoformat(),
+            "modifiedDate": NOW.isoformat(),
+            "warningUpdateDescription": "Changed timing",
+            "warningStatus": "ISSUED",
+        }
+    )
+    row = warning_summary({"type": "FeatureCollection", "features": [feature]}, NOW, 53, -3.8, [])[
+        "warnings"
+    ][0]
+    assert row["details"] == row["what_to_do"] == long_advice
+    assert row["what_to_expect"] == [long_advice]
+    assert row["status"] == "ISSUED" and row["version"] == "2"
+    assert row["modified"] == row["issued"] == NOW.isoformat()
+    assert row["update_description"] == "Changed timing"
+    del feature["properties"]["warningFurtherDetails"]
+    row = warning_summary({"type": "FeatureCollection", "features": [feature]}, NOW, 53, -3.8, [])[
+        "warnings"
+    ][0]
+    assert row["details"] == "Legacy alternate field"
+
+
+def test_updated_or_cancelled_warning_orders_by_modification_with_same_issue_time():
+    from copy import deepcopy
+
+    original = warning(NOW, NOW + timedelta(hours=1))
+    original["properties"].update({"issuedDate": NOW.isoformat(), "modifiedDate": NOW.isoformat()})
+    newer = deepcopy(original)
+    newer["properties"].update(
+        {
+            "modifiedDate": (NOW + timedelta(minutes=1)).isoformat(),
+            "warningVersion": "2",
+            "warningHeadline": "Updated synthetic headline",
+            "warningUpdateDescription": "Timing changed",
+        }
+    )
+    payload = {"type": "FeatureCollection", "features": [newer, original]}
+    summary = warning_summary(payload, NOW + timedelta(minutes=2), 53, -3.8, [])
+    assert summary["warnings"][0]["headline"] == "Updated synthetic headline"
+    newer["properties"]["warningStatus"] = "CANCELLED"
+    assert warning_summary(payload, NOW + timedelta(minutes=2), 53, -3.8, [])["level"] == "none"
+
+
 def test_region_fallback_only_when_geometry_unavailable_and_never_hides_bad_dates():
     feature = warning(NOW, NOW + timedelta(hours=1), geometry=None)
     payload = {"type": "FeatureCollection", "features": [feature]}

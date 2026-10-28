@@ -156,7 +156,10 @@ async def test_warning_unavailable_is_never_no_warning(tmp_path):
         assert level.native_value is None
         assert level.extra_state_attributes["warnings"] is None
         coord.last_update_success = True
-        coord.data["fetched_at"] = (utcnow() - timedelta(minutes=46)).isoformat()
+        assert coord.update_interval == timedelta(minutes=1)
+        coord.data["fetched_at"] = (utcnow() - timedelta(minutes=9, seconds=59)).isoformat()
+        assert binary.available
+        coord.data["fetched_at"] = (utcnow() - timedelta(minutes=10)).isoformat()
         assert not binary.available
     finally:
         await hass.async_stop()

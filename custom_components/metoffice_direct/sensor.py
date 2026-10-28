@@ -4,7 +4,7 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, Sen
 from homeassistant.const import EntityCategory
 
 from .api import utcnow
-from .const import BPF_FIELDS, DAILY_LIMITS, OBSERVATION_FIELDS, POINT_FIELDS
+from .const import BPF_FIELDS, DAILY_LIMITS, INTERVALS, MAX_AGE, OBSERVATION_FIELDS, POINT_FIELDS
 from .entity import ProviderEntity
 from .model import condition, number, timestamp
 
@@ -145,6 +145,8 @@ class WarningSensor(ProviderEntity, SensorEntity):
         return {
             **super().extra_state_attributes,
             "warnings": summary["warnings"] if summary else None,
+            "stale_after_seconds": int(MAX_AGE["warnings"].total_seconds()),
+            "poll_interval_seconds": int(INTERVALS["warnings"].total_seconds()),
             "filter_policy": "Home polygon; configured region fallback only when geometry is unavailable",
         }
 
