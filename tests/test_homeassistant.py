@@ -74,6 +74,23 @@ async def test_real_weather_conversion_preserves_rh_and_dew_point(tmp_path):
         assert converted["humidity"] == 90
         assert converted["dew_point"] == 1.5
         assert converted["wind_speed"] == pytest.approx(7.2)
+        assert converted["metoffice_weather_code"] == 0
+        assert weather.extra_state_attributes["metoffice_weather_code"] == 0
+        daily.data = {
+            "fetched_at": (now - timedelta(minutes=5)).isoformat(),
+            "model_run": (now - timedelta(hours=2)).isoformat(),
+        }
+        assert (
+            weather.extra_state_attributes["metoffice_daily_model_run"] == daily.data["model_run"]
+        )
+        assert (
+            weather.extra_state_attributes["metoffice_daily_fetched_at"] == daily.data["fetched_at"]
+        )
+        assert weather.extra_state_attributes["uv_index"] is None
+        assert weather.extra_state_attributes["precipitation_probability"] is None
+        hourly.data["rows"][0].update(uvIndex=2, probOfPrecipitation=40)
+        assert weather.extra_state_attributes["uv_index"] == 2
+        assert weather.extra_state_attributes["precipitation_probability"] == 40
         assert weather.extra_state_attributes["current_time"] == hourly.data["rows"][0]["time"]
         assert weather.extra_state_attributes["model_run"] == hourly.data["model_run"]
         hourly.data["model_run"] = (now - timedelta(hours=7)).isoformat()

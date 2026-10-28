@@ -73,6 +73,7 @@ def test_forecast_carries_same_hour_humidity_dewpoint_and_si_wind():
             "native_wind_speed": 2,
             "native_pressure": 101300,
             "condition": "clear-night",
+            "metoffice_weather_code": 0,
         }
     ]
     assert "cloud_coverage" not in hourly_forecasts(data, NOW)[0]

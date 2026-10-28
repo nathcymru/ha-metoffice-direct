@@ -15,7 +15,7 @@ from homeassistant.core import callback
 
 from .api import utcnow
 from .entity import ProviderEntity
-from .model import condition, daily_forecasts, hourly_forecasts, number, timestamp
+from .model import condition, daily_forecasts, hourly_forecasts, number, timestamp, weather_code
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -119,4 +119,11 @@ class DirectWeather(ProviderEntity, WeatherEntity):
             **super().extra_state_attributes,
             "source": "Global Spot point forecast",
             "station_observation": False,
+            "metoffice_weather_code": weather_code(
+                (self.current() or {}).get("significantWeatherCode")
+            ),
+            "uv_index": self.value("uvIndex"),
+            "precipitation_probability": self.value("probOfPrecipitation"),
+            "metoffice_daily_fetched_at": (self.daily.data or {}).get("fetched_at"),
+            "metoffice_daily_model_run": (self.daily.data or {}).get("model_run"),
         }

@@ -1,13 +1,17 @@
 {
   "domain": "metoffice_direct",
   "name": "Met Office Direct",
-  "codeowners": ["@nathcymru"],
+  "codeowners": [
+    "@nathcymru"
+  ],
   "config_flow": true,
-  "dependencies": ["http"],
+  "dependencies": [
+    "http"
+  ],
   "documentation": "https://github.com/nathcymru/ha-metoffice-direct",
   "issue_tracker": "https://github.com/nathcymru/ha-metoffice-direct/issues",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.1.1"
 }

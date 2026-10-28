@@ -23,9 +23,16 @@ def timestamp(value):
     return parsed.astimezone(UTC) if parsed.tzinfo else None
 
 
-def condition(code):
+def weather_code(code):
+    """Preserve official symbol identity without guessing unsupported values."""
     value = number(code)
-    return CONDITIONS.get(int(value)) if value is not None and value.is_integer() else None
+    if value is None or not value.is_integer() or int(value) not in CONDITIONS:
+        return None
+    return int(value)
+
+
+def condition(code):
+    return CONDITIONS.get(weather_code(code))
 
 
 def dew_point(temperature, humidity):
@@ -94,6 +101,7 @@ def hourly_forecasts(data, now):
                 item[target] = value
         if (value := condition(row.get("significantWeatherCode"))) is not None:
             item["condition"] = value
+            item["metoffice_weather_code"] = weather_code(row["significantWeatherCode"])
         if "native_temperature" in item:
             result.append(item)
     return result
@@ -121,6 +129,9 @@ def daily_forecasts(data, now, timezone):
                 item[target] = value
         if (value := condition(row.get("daySignificantWeatherCode"))) is not None:
             item["condition"] = value
+            item["metoffice_weather_code"] = weather_code(row["daySignificantWeatherCode"])
+        if (value := weather_code(row.get("nightSignificantWeatherCode"))) is not None:
+            item["metoffice_night_weather_code"] = value
         if "native_temperature" in item:
             result.append(item)
     return result
