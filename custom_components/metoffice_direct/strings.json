@@ -1,0 +1,9 @@
+{
+  "title": "Met Office Direct",
+  "config": {
+    "abort": {
+      "yaml_required": "Configure metoffice_direct in configuration.yaml using !secret references, then restart Home Assistant. API keys are kept out of config entries.",
+      "already_configured": "Met Office Direct is already configured."
+    }
+  }
+}

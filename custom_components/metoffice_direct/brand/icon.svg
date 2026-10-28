@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Met Office Direct community integration</title>
+  <desc id="desc">A white cloud, a golden sun and three blue raindrops.</desc>
+  <!-- Original artwork. Copyright (c) 2026 Nathan. MIT licensed. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#252e61"/>
+      <stop offset="1" stop-color="#315c91"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="52" fill="url(#sky)"/>
+  <circle cx="175" cy="72" r="38" fill="#ffd064"/>
+  <path d="M67 156A31 31 0 0 1 59 95A47 47 0 0 1 151 85A36 36 0 0 1 185 156Z" fill="#fffaf0"/>
+  <path d="M79 174C79 174 63 195 63 202A16 16 0 0 0 95 202C95 195 79 174 79 174Z" fill="#55c9ed"/>
+  <path d="M128 174C128 174 112 195 112 202A16 16 0 0 0 144 202C144 195 128 174 128 174Z" fill="#55c9ed"/>
+  <path d="M177 174C177 174 161 195 161 202A16 16 0 0 0 193 202C193 195 177 174 177 174Z" fill="#55c9ed"/>
+</svg>

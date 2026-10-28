@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+.ha-venv/
+.env
+.env.*
+secrets.yaml
+config/
+.storage/
+*.log
+.DS_Store

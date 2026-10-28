@@ -1,0 +1,15 @@
+# Put the API values in secrets.yaml; never put them in this repository.
+metoffice_direct:
+  global_spot_key: !secret metoffice_direct_global_spot_key
+  warnings_key: !secret metoffice_direct_warnings_key
+  observations_key: !secret metoffice_direct_observations_key
+  bpf_key: !secret metoffice_direct_bpf_key
+  # Optional keys are accepted, but no orders or downloads are created automatically.
+  map_images_key: !secret metoffice_direct_map_images_key
+  # Required to enable maps; use the ID of your single-layer precipitation PNG order.
+  # map_order_id: your_order_id
+  atmospheric_key: !secret metoffice_direct_atmospheric_key
+  # Defaults to Home Assistant's configured home coordinates.
+  warning_regions:
+    - Wales
+    - North West England
