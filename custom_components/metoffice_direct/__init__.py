@@ -95,7 +95,11 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     # async_refresh retains unavailable entities for honest status and later recovery.
     try:
         await asyncio.gather(
-            *(coordinator.async_refresh() for coordinator in coordinators.values())
+            *(
+                coordinator.async_refresh()
+                for kind, coordinator in coordinators.items()
+                if kind != "map_images"
+            )
         )
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except Exception:
@@ -104,6 +108,11 @@ async def async_setup_entry(hass, entry: ConfigEntry):
         )
         raise
     hass.data.setdefault(DOMAIN, {})["runtime"] = entry.runtime_data
+    if "map_images" in coordinators:
+        # Metadata and PNGs share a paced quota: optional playback must not delay weather.
+        entry.async_create_background_task(
+            hass, coordinators["map_images"].async_refresh(), "Met Office map initial refresh"
+        )
     return True
 
 

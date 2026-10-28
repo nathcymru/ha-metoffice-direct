@@ -10,3 +10,12 @@ inspect_capabilities:
           options:
             - bpf
             - map_images
+    stage:
+      name: Inspection stage
+      default: catalog
+      selector:
+        select:
+          options:
+            - catalog
+            - details
+            - coverage

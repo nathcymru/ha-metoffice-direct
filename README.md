@@ -2,7 +2,7 @@
 
 A Home Assistant integration for the Met Office DataHub APIs. Runs inside Home Assistant; no additional server or container is required. API credentials are read from YAML secrets and never enter config entries, frontend configuration, image URLs or diagnostics.
 
-This local implementation has been tested against Home Assistant 2026.10.4 with synthetic responses. Authenticated provider response validation and live deployment are separate acceptance steps. BPF v2 discovery remains deliberately conservative until the subscribed API's actual collection and instance metadata are verified.
+Tested against Home Assistant 2026.10.4 with synthetic responses. Provider schemas are validated before data is published; unsupported metadata remains unavailable. Installation-specific credentials, available data and dashboard behavior require live acceptance.
 
 ## Installation
 
@@ -24,7 +24,7 @@ The initial weather entity ID is `weather.metoffice_direct`. Entity IDs can subs
 - Current numeric point fields have enabled sensors, including temperature, dew point, apparent temperature, RH, wind/gust/direction, pressure, visibility, UV, precipitation rate/probability and previous-hour precipitation/snow water equivalent. Missing values make the affected sensor unavailable.
 - `sensor.metoffice_direct_uv_index` provides the point forecast UV value.
 - Nearby Land Observations are separate `sensor.metoffice_direct_station_*` entities. Temperature, humidity, estimated dew point, pressure, visibility, wind, condition, pressure tendency and data time retain station identity and timestamps. Estimated dew point uses a single observation's temperature/RH pair. Station data never silently replaces point forecast values.
-- BPF sensors expose supported median physical quantities only when advertised CoverageJSON dimensions, parameter names and units can be validated. Unknown dimensions/units or metadata are reported as unavailable. Selected parameter horizons vary; this does not promise 14 days of hourly weather.
+- BPF sensors expose supported median physical quantities only when advertised CoverageJSON dimensions, parameter names and units can be validated. Unknown dimensions/units or metadata are reported as unavailable. The UK percentile collection is discovered from the catalog. Its explicitly advertised `blended` instance is a stream: `instance` identifies it, while `model_run` remains unknown because the API does not advertise a run timestamp for that stream. Freshness uses fetch age and actual forecast times. Selected parameter horizons vary; this does not promise 14 days of hourly weather.
 
 Current point data expires after two hours, station data after three hours, and point forecast model runs after six hours. Cache fetch age is checked independently. API failures immediately mark the affected product unavailable; one optional product failure does not disable other products.
 
@@ -45,7 +45,9 @@ Selection uses the configured home's position within warning polygons, including
 
 ## Precipitation playback
 
-Configure `map_order_id` for a single-parameter total precipitation rate PNG order. The integration accepts the exact normalized `total_precipitation_rate` or `single_total_precipitation_rate_ground_0` identifier; other identifiers require explicit capability verification. It uses the order's published `fileId`, `runDateTime` and singleton `timesteps`; it does not assume a WMS `TIME` endpoint. It selects one consistent model run with 25 hourly frames from the current hour through the next 24 hours. Every selected frame must carry identical region and extent metadata. Incomplete, geographically inconsistent, ambiguous or other-parameter orders remain unavailable.
+Configure `map_order_id` for a single-parameter total precipitation rate PNG order with hourly steps covering the next 24 hours. The catalog supplies thin file records. Each selected record is checked against the documented single-file metadata endpoint for its exact `total_precipitation_rate` parameter, run and nested geographic extent.
+
+The observed API convention identifies a frame as `total_precipitation_rate_tsN_YYYYMMDDHH`. Its metadata supplies the whole order's allowed timestep set, not a single timestep. The integration checks that `N` belongs to that set and that the dated suffix agrees with `runDateTime`; valid time is then run plus N hours. Moving `+00`/`+12` aliases are excluded. One consistent model run supplies 25 hourly frames from the current hour through the next 24 hours. Every selected frame must carry identical region and extent metadata. Incomplete, inconsistent or unsupported orders remain unavailable.
 
 `sensor.metoffice_direct_forecast_map` is `ready` when usable. Attributes:
 
@@ -58,7 +60,9 @@ Authenticated clients request `GET /api/metoffice_direct/map/{id}`. The response
 
 [HA-Sky-Canvas](https://github.com/nathcymru/HA-Sky-Canvas) supplies the companion forecast playback card and optional dashboard house scenes.
 
-Only missing images are downloaded. Cache IDs include parameter and geographic metadata, so a changed area cannot reuse an older area's image. A second metadata check after a download batch prevents publishing frames across a provider model-run or geography change. Images persist across restart and are bounded to 64 MiB, 8 MiB per image, and 25 published frames. Refresh is hourly; old unused frames are removed after a successful new set. Viewer count and playback do not cause provider requests.
+Only missing images are downloaded. A fresh anchor metadata request checks the order's geography each hour; other dated file metadata can be reused for up to six hours when its full geography and parameter match that anchor. Cache IDs include parameter and geographic metadata. A second anchor check after downloads detects a change during the batch. Interrupted or unverified downloads are removed; restart only trusts images listed in a successfully published manifest.
+
+A cold 25-frame load uses 52 requests: one catalog, 25 file metadata, 25 PNGs and one final metadata check. A normal hourly slide uses five requests and reuses 24 PNGs. Model-run changes, metadata expiry or changed geography require additional validated downloads, all under the same 900-call ceiling. Maps load in the background so their paced downloads do not delay primary weather startup. Images persist across restart and are bounded to 64 MiB, 8 MiB per image, and 25 published frames. Refresh is hourly; actual coverage timestamps remain visible between refreshes. Viewer count and playback do not cause provider requests.
 
 ## Request limits and recovery
 
@@ -71,9 +75,11 @@ Only missing images are downloaded. Cache IDs include parameter and geographic m
 | Map Images | One order hourly; missing frames only; metadata recheck when images change | 900 calls |
 | Atmospheric | No automatic download | No consumption |
 
-The local ledger counts requests from this installation, not calls made by other clients using the same account. It is persisted before requests, survives restart, and blocks network access if the ledger cannot be written. Attempts are persisted to prevent reload bursts. No automatic request retries occur. HTTP 429 respects `Retry-After`; without it, calls wait until the next UTC day. Server/network failures use persistent exponential backoff. HTTP 401/403 stops that product until reload. API keys are never placed in logs or returned response errors.
+The local ledger counts requests from this installation, not calls made by other clients using the same account. It is persisted before requests, survives restart, and blocks network access if the ledger cannot be written. Attempts are persisted to prevent reload bursts. A parser schema upgrade may permit one immediate revalidation; its version marker is persisted, and all request limits and provider backoff remain in force. No automatic request retries occur. HTTP 429 respects `Retry-After`; without it, calls wait until the next UTC day. Server/network failures use persistent exponential backoff. HTTP 401/403 stops that product until reload. API keys are never placed in logs or returned response errors.
 
 Runtime state lives in `.storage/metoffice_direct_runtime.json`; map images live in `.storage/metoffice_direct_maps`. These are private local caches, not release assets. Do not delete the quota ledger to work around limits. Rotating a key does not reset the provider's account allowance.
+
+Administrators can use `metoffice_direct.inspect_capabilities` for a bounded schema summary. `catalog` and `details` stages select only fixed endpoints and previously advertised identifiers; BPF `coverage` returns median parameter units, array dimensions and forecast time coverage without location coordinates or weather values. Each stage uses at most one shared-budget request and caches the sanitized result for 15 minutes.
 
 ## Development and validation
 

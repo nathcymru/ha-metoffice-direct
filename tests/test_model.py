@@ -201,3 +201,40 @@ def test_bpf_dimension_order_and_kelvin_conversion():
     payload["parameters"]["airTemperature1p5m"]["unit"]["symbol"] = "unknown"
     with pytest.raises(ValueError, match="unit"):
         parse_bpf(payload)
+
+
+def test_named_bpf_instance_is_advertised_not_an_invented_model_timestamp():
+    from custom_components.metoffice_direct.model import select_bpf_instance
+
+    item = {"id": "blended", "parameter_names": {"windSpeed10m": {"unit": {"symbol": "m s-1"}}}}
+    assert select_bpf_instance([item], NOW) is item
+    with pytest.raises(ValueError):
+        select_bpf_instance([{"id": "latest"}], NOW)
+    with pytest.raises(ValueError):
+        select_bpf_instance([item, {"id": "some-other-stream"}], NOW)
+    with pytest.raises(ValueError):
+        select_bpf_instance([{"id": (NOW + timedelta(hours=1)).isoformat()}], NOW)
+
+
+def test_bpf_cf_wind_units_from_advertised_metadata_are_supported_without_overriding_explicit_units():
+    payload = {
+        "coverages": [
+            {
+                "domain": {
+                    "axes": {"t": {"values": [NOW.isoformat()]}, "percentile": {"values": [50]}}
+                },
+                "ranges": {
+                    "windSpeed10m": {
+                        "axisNames": ["t", "percentile"],
+                        "shape": [1, 1],
+                        "values": [2.5],
+                    }
+                },
+            }
+        ]
+    }
+    metadata = {"windSpeed10m": {"unit": {"symbol": "m s-1"}}}
+    assert parse_bpf(payload, metadata)["rows"][0]["windSpeed10m"] == 2.5
+    payload["parameters"] = {"windSpeed10m": {"unit": {"symbol": "knots"}}}
+    with pytest.raises(ValueError, match="unit"):
+        parse_bpf(payload, metadata)

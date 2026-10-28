@@ -16,6 +16,7 @@ from test_homeassistant import entry
 
 from custom_components.metoffice_direct.api import Client, StateStore, utcnow
 from custom_components.metoffice_direct.maps import (
+    MAP_VALIDATION_VERSION,
     MapCoordinator,
     MapImageView,
     frame_plan,
@@ -205,7 +206,7 @@ async def test_map_cache_deduplicates_downloads_across_restart_and_serves_authen
         assert not restarted.fresh
         with pytest.raises(web.HTTPNotFound):
             await MapImageView().get(request, identifier)
-        restarted.data["validation_version"] = 2
+        restarted.data["validation_version"] = MAP_VALIDATION_VERSION
         with pytest.raises(web.HTTPNotFound):
             await MapImageView().get(request, "../secrets.yaml")
         with pytest.raises(web.HTTPNotFound):
@@ -282,5 +283,144 @@ async def test_map_cache_size_is_enforced_before_disk_write(tmp_path, monkeypatc
         assert not coord.fresh
         assert sum(path.stat().st_size for path in coord.directory.glob("*.png")) <= len(PNG) * 2
         assert client.store.cache("map_images") is None
+    finally:
+        await hass.async_stop()
+
+
+def thin_manifest(now):
+    run = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return {
+        "orderDetails": {
+            "files": [
+                {
+                    "fileId": f"total_precipitation_rate_ts{hour}_{suffix}",
+                    "runDateTime": run.isoformat(),
+                    "run": "00",
+                }
+                for hour in range(49)
+                for suffix in ("+00", run.strftime("%Y%m%d%H"))
+            ]
+        }
+    }
+
+
+def test_thin_catalog_selects_run_pinned_candidates_without_moving_aliases():
+    from custom_components.metoffice_direct.maps import map_candidates
+
+    now = utcnow()
+    candidates = map_candidates(thin_manifest(now), now)
+    assert len(candidates) == 25
+    assert all("+00" not in item["fileId"] for item in candidates)
+    assert (
+        candidates[0]["expected_time"] == now.replace(minute=0, second=0, microsecond=0).isoformat()
+    )
+    assert (
+        candidates[-1]["expected_time"]
+        == (now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=24)).isoformat()
+    )
+
+
+@pytest.mark.parametrize("change", ["moving_only", "different_layer", "wrong_run", "alias_run"])
+def test_thin_catalog_rejects_unsafe_or_incomplete_candidates(change):
+    from custom_components.metoffice_direct.maps import map_candidates
+
+    now = utcnow()
+    payload = thin_manifest(now)
+    if change == "moving_only":
+        payload["orderDetails"]["files"] = payload["orderDetails"]["files"][::2]
+    elif change == "different_layer":
+        payload["orderDetails"]["files"][0]["fileId"] = "rainbow_temperature_ts0_+00"
+    elif change == "wrong_run":
+        payload["orderDetails"]["files"][1]["fileId"] = "total_precipitation_rate_ts0_2000010100"
+    else:
+        payload["orderDetails"]["files"][0]["fileId"] = "total_precipitation_rate_ts0_+12"
+    with pytest.raises(ValueError):
+        map_candidates(payload, now)
+
+
+def detailed_file(now, identifier):
+    file = manifest(now)["orderDetails"]["files"][0]
+    return {
+        "fileDetails": {
+            "file": {
+                **file,
+                "fileId": identifier,
+                "run": "00",
+                "timesteps": [str(hour) for hour in range(49)],
+            }
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "step_missing",
+        "wrong_run",
+        "wrong_id",
+        "region_missing",
+        "invalid_bounds",
+        "wrong_units",
+        "other_parameter",
+    ],
+)
+def test_per_file_metadata_must_confirm_candidate_time_parameter_and_geography(change):
+    from custom_components.metoffice_direct.maps import map_candidates, validate_map_file
+
+    now = utcnow()
+    candidate = map_candidates(thin_manifest(now), now)[0]
+    payload = detailed_file(now, candidate["fileId"])
+    file = payload["fileDetails"]["file"]
+    if change == "step_missing":
+        file["timesteps"].remove(str(now.hour))
+    elif change == "wrong_run":
+        file["runDateTime"] = (now - timedelta(days=1)).isoformat()
+    elif change == "wrong_id":
+        file["fileId"] += "_extra"
+    elif change == "region_missing":
+        file["region"].pop("extent")
+    elif change == "invalid_bounds":
+        file["region"]["extent"]["y"]["upperBound"] = "NaN"
+    elif change == "wrong_units":
+        file["region"]["extent"]["x"]["uomLabel"] = "meters"
+    else:
+        file["parameters"] = ["temperature"]
+    with pytest.raises(ValueError):
+        validate_map_file(payload, candidate)
+
+
+@pytest.mark.asyncio
+async def test_actual_thin_manifest_resolves_metadata_once_then_reuses_immutable_files(
+    tmp_path, monkeypatch
+):
+    from custom_components.metoffice_direct import maps
+
+    hass = HomeAssistant(str(tmp_path))
+    now = utcnow().replace(hour=6, minute=15)
+    monkeypatch.setattr(maps, "utcnow", lambda: now)
+    try:
+        client = Client(Mock(), StateStore(hass), {"map_images": "SYNTHETIC_SECRET"})
+
+        async def get(product, path, **kwargs):
+            if kwargs.get("binary"):
+                return PNG
+            if path.endswith("/latest"):
+                return thin_manifest(now)
+            return detailed_file(now, path.rsplit("/", 1)[-1])
+
+        client.get = AsyncMock(side_effect=get)
+        coord = MapCoordinator(hass, entry(), client, {"map_order_id": "synthetic-order"})
+        await coord.load_cache()
+        await coord.async_refresh()
+        assert coord.fresh
+        assert client.get.call_count == 52  # List, 25 metadata, 25 PNG, geographic recheck.
+        assert len(client.store.cache("map_file_metadata")["files"]) == 25
+        first_ids = {frame["id"] for frame in coord.data["frames"]}
+        now += timedelta(hours=1, seconds=1)
+        await coord.async_refresh()
+        assert coord.fresh
+        assert client.get.call_count == 57  # List, anchor/new metadata, one PNG, recheck.
+        assert len(first_ids & {frame["id"] for frame in coord.data["frames"]}) == 24
+        assert len(client.store.cache("map_file_metadata")["files"]) == 25
     finally:
         await hass.async_stop()

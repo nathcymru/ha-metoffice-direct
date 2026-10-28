@@ -213,3 +213,96 @@ async def test_real_yaml_secrets_and_setup_entry_shape_keep_keys_runtime_only(
         hass.config_entries.async_forward_entry_setups.assert_awaited_once()
     finally:
         await hass.async_stop()
+
+
+@pytest.mark.asyncio
+async def test_map_cold_start_does_not_block_primary_weather_setup(tmp_path, monkeypatch):
+    import asyncio
+
+    hass = HomeAssistant(str(tmp_path))
+    started, release = asyncio.Event(), asyncio.Event()
+    try:
+        hass.config_entries = ConfigEntries(hass, {})
+        hass.config_entries.async_forward_entry_setups = AsyncMock()
+        monkeypatch.setattr(
+            integration,
+            "async_integration_yaml_config",
+            AsyncMock(
+                return_value={
+                    "metoffice_direct": {
+                        "global_spot_key": "SYNTHETIC_SPOT",
+                        "map_images_key": "SYNTHETIC_MAP",
+                        "map_order_id": "synthetic-order",
+                        "warning_regions": [],
+                    }
+                }
+            ),
+        )
+        monkeypatch.setattr(integration, "async_get_clientsession", Mock(return_value=Mock()))
+        monkeypatch.setattr(ProviderCoordinator, "async_refresh", AsyncMock())
+
+        async def map_refresh(self):
+            started.set()
+            await release.wait()
+
+        monkeypatch.setattr(integration.MapCoordinator, "async_refresh", map_refresh)
+        configured = entry()
+        assert await asyncio.wait_for(integration.async_setup_entry(hass, configured), timeout=1)
+        await asyncio.wait_for(started.wait(), timeout=1)
+        assert not release.is_set()
+        assert hass.data["metoffice_direct"]["runtime"] is configured.runtime_data
+        hass.config_entries.async_forward_entry_setups.assert_awaited_once()
+        assert len(configured._background_tasks) == 1
+    finally:
+        release.set()
+        await hass.async_stop()
+
+
+@pytest.mark.asyncio
+async def test_bpf_selects_advertised_uk_collection_and_ignores_global_and_probability_products(
+    tmp_path, monkeypatch
+):
+    from custom_components.metoffice_direct import coordinator as module
+
+    hass = HomeAssistant(str(tmp_path))
+    try:
+        coord = coordinator(hass, "bpf")
+        coord.client.get = AsyncMock(
+            side_effect=[
+                {
+                    "collections": [
+                        {"id": name}
+                        for name in (
+                            "global-spot-percentiles",
+                            "global-spot-probabilities",
+                            "uk-spot-percentiles",
+                            "uk-spot-probabilities",
+                        )
+                    ]
+                },
+                {
+                    "instances": [
+                        {
+                            "id": "2026-01-01T00:00:00Z",
+                            "parameter_names": {"airTemperature1p5m": {"unit": {"symbol": "K"}}},
+                        }
+                    ]
+                },
+                {"synthetic": "coverage"},
+            ]
+        )
+        monkeypatch.setattr(module, "parse_bpf", Mock(return_value={"rows": []}))
+        data = await coord._bpf()
+        assert data["collection"] == "uk-spot-percentiles"
+        assert (
+            coord.client.get.call_args_list[1].args[1]
+            == "/collections/uk-spot-percentiles/instances"
+        )
+        assert (
+            coord.client.get.call_args_list[2]
+            .args[1]
+            .endswith("/instances/2026-01-01T00%3A00%3A00Z/position")
+        )
+        assert coord.client.store.cache("bpf_collection") == "uk-spot-percentiles"
+    finally:
+        await hass.async_stop()

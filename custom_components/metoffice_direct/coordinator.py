@@ -9,9 +9,17 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import ProviderError, utcnow
 from .const import BPF_FIELDS, INTERVALS, MAX_AGE
-from .model import parse_bpf, parse_observations, parse_spot, timestamp, warning_summary
+from .model import (
+    parse_bpf,
+    parse_observations,
+    parse_spot,
+    select_bpf_instance,
+    timestamp,
+    warning_summary,
+)
 
 _LOGGER = logging.getLogger(__name__)
+BPF_PARSER_REVISION = 1
 
 
 class ProviderCoordinator(DataUpdateCoordinator):
@@ -32,6 +40,10 @@ class ProviderCoordinator(DataUpdateCoordinator):
         fetched = timestamp((self.data or {}).get("fetched_at"))
         return bool(
             self.last_update_success
+            and (
+                self.kind != "bpf"
+                or (self.data or {}).get("parser_revision") == BPF_PARSER_REVISION
+            )
             and fetched
             and timedelta(0) <= utcnow() - fetched < MAX_AGE[self.kind]
         )
@@ -40,12 +52,31 @@ class ProviderCoordinator(DataUpdateCoordinator):
         try:
             cached = self.client.store.cache(self.kind)
             fetched = timestamp((cached or {}).get("fetched_at"))
-            if fetched and timedelta(0) <= utcnow() - fetched < INTERVALS[self.kind]:
+            parser_current = (
+                self.kind != "bpf"
+                or self.client.store.cache("bpf_attempt_parser_revision") == BPF_PARSER_REVISION
+            )
+            cache_current = (
+                self.kind != "bpf" or (cached or {}).get("parser_revision") == BPF_PARSER_REVISION
+            )
+            if (
+                cache_current
+                and fetched
+                and timedelta(0) <= utcnow() - fetched < INTERVALS[self.kind]
+            ):
                 self.error_code = None
                 return cached
             attempted = timestamp(self.client.store.cache("attempt_" + self.kind))
-            if attempted and timedelta(0) <= utcnow() - attempted < INTERVALS[self.kind]:
+            if (
+                parser_current
+                and attempted
+                and timedelta(0) <= utcnow() - attempted < INTERVALS[self.kind]
+            ):
                 raise ProviderError(f"{self.kind}: scheduled retry pending")
+            if self.kind == "bpf":
+                await self.client.store.save_cache(
+                    "bpf_attempt_parser_revision", BPF_PARSER_REVISION
+                )
             await self.client.store.save_cache("attempt_" + self.kind, utcnow().isoformat())
             if self.kind in ("hourly", "daily", "three_hourly"):
                 data = await self._spot()
@@ -55,6 +86,8 @@ class ProviderCoordinator(DataUpdateCoordinator):
                 data = await self._observations()
             else:
                 data = await self._bpf()
+            if self.kind == "bpf":
+                data["parser_revision"] = BPF_PARSER_REVISION
             data["fetched_at"] = utcnow().isoformat()
             await self.client.store.save_cache(self.kind, data)
             self.error_code = None
@@ -157,15 +190,13 @@ class ProviderCoordinator(DataUpdateCoordinator):
     async def _bpf(self):
         """Use advertised UK percentile metadata; unsupported shapes remain unavailable."""
         collection = self.client.store.cache("bpf_collection")
-        if not collection:
+        if collection != "uk-spot-percentiles":
             payload = await self.client.get("bpf", "/collections")
             collections = payload if isinstance(payload, list) else payload.get("collections", [])
             candidates = [
                 item
                 for item in collections
-                if isinstance(item, dict)
-                and "percentile" in item.get("id", "").lower()
-                and item.get("id", "").lower().endswith("uk")
+                if isinstance(item, dict) and item.get("id") == "uk-spot-percentiles"
             ]
             if len(candidates) != 1:
                 raise ProviderError("bpf: cannot identify one advertised UK percentile collection")
@@ -178,29 +209,26 @@ class ProviderCoordinator(DataUpdateCoordinator):
             if isinstance(metadata, list)
             else metadata.get("instances", metadata.get("collections", []))
         )
-        # Only accept an explicit advertised instance timestamp; never invent 'latest'.
-        candidates = []
-        for item in instances:
-            if not isinstance(item, dict) or not isinstance(item.get("id"), str):
-                continue
-            date = (
-                timestamp(item.get("id"))
-                or timestamp(item.get("runDate"))
-                or timestamp(item.get("datetime"))
-            )
-            if date:
-                candidates.append((date, item["id"]))
-        if not candidates:
-            raise ProviderError("bpf: instance metadata requires capability verification")
-        _, instance = max(candidates)
+        # A named blended instance is a stream, not a model-run timestamp.
+        selected = select_bpf_instance(instances, utcnow())
+        instance = selected["id"]
+        advertised = selected.get("parameter_names", {})
+        fields = [field for field in BPF_FIELDS if field in advertised]
+        if not fields:
+            raise ProviderError("bpf: no supported parameters advertised by the instance")
         payload = await self.client.get(
             "bpf",
             path + "/instances/" + quote(instance, safe="") + "/position",
             params={
                 "coords": f"POINT({self.config['longitude']} {self.config['latitude']})",
-                "parameter-name": ",".join(BPF_FIELDS),
+                "parameter-name": ",".join(fields),
                 "percentiles": "50",
                 "datetime": utcnow().replace(minute=0, second=0, microsecond=0).isoformat() + "/..",
             },
         )
-        return {**parse_bpf(payload), "instance": instance, "collection": collection}
+        return {
+            **parse_bpf(payload, advertised),
+            "instance": instance,
+            "collection": collection,
+            "model_run": (timestamp(instance).isoformat() if timestamp(instance) else None),
+        }

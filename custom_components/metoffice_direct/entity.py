@@ -80,5 +80,7 @@ class ProviderEntity(CoordinatorEntity):
         if self.coordinator.kind == "observations":
             attrs["station"] = data.get("station")
         else:
-            attrs["model_run"] = data.get("model_run", data.get("instance"))
+            attrs["model_run"] = data.get("model_run")
+            if self.coordinator.kind == "bpf":
+                attrs["instance"] = data.get("instance")
         return attrs

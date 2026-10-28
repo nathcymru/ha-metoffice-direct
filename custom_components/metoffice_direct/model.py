@@ -327,7 +327,33 @@ def warning_summary(payload, now, latitude, longitude, regions):
     }
 
 
-def parse_bpf(payload):
+def select_bpf_instance(instances, now):
+    """Select an explicitly advertised instance, including the named blended stream."""
+    if (
+        not isinstance(instances, list)
+        or not instances
+        or any(
+            not isinstance(item, dict) or not isinstance(item.get("id"), str) for item in instances
+        )
+    ):
+        raise ValueError("BPF instance metadata is invalid")
+    if len(instances) == 1 and instances[0]["id"] == "blended":
+        return instances[0]
+    candidates = []
+    for item in instances:
+        date = (
+            timestamp(item["id"])
+            or timestamp(item.get("runDate"))
+            or timestamp(item.get("datetime"))
+        )
+        if date and date <= now:
+            candidates.append((date, item))
+    if not candidates:
+        raise ValueError("No supported advertised BPF instance")
+    return max(candidates, key=lambda item: item[0])[1]
+
+
+def parse_bpf(payload, parameter_metadata=None):
     """Decode selected physical parameters without assuming dimension ordering."""
     if not isinstance(payload, dict) or not isinstance(payload.get("coverages"), list):
         raise ValueError("Invalid BPF coverage collection")
@@ -358,7 +384,11 @@ def parse_bpf(payload):
                     indices[name] = 0
                 else:
                     raise ValueError("Unsupported BPF non-time dimension")
-            unit = parameters.get(key, {}).get("unit", {}).get("symbol")
+            unit = (
+                parameters.get(key, {})
+                .get("unit", (parameter_metadata or {}).get(key, {}).get("unit", {}))
+                .get("symbol")
+            )
             if isinstance(unit, dict):
                 unit = unit.get("value")
             for t_index, time in enumerate(axes["t"]["values"]):
@@ -371,7 +401,9 @@ def parse_bpf(payload):
                 if value is None:
                     continue
                 target = BPF_FIELDS[key][1]
-                if target == "°C" and unit in ("K", "kelvin"):
+                if target == "m/s" and unit == "m s-1":
+                    pass
+                elif target == "°C" and unit in ("K", "kelvin"):
                     value -= 273.15
                 elif target == "%" and unit in ("1", "fraction"):
                     value *= 100
