@@ -1,0 +1,12 @@
+inspect_capabilities:
+  name: Inspect API capabilities
+  description: Return a bounded, sanitized schema summary using one shared-budget request. Requires administrator access and caches results for 15 minutes.
+  fields:
+    product:
+      name: Product
+      required: true
+      selector:
+        select:
+          options:
+            - bpf
+            - map_images

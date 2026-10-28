@@ -6,11 +6,13 @@ This local implementation has been tested against Home Assistant 2026.10.4 with 
 
 ## Installation
 
-Copy `custom_components/metoffice_direct` into Home Assistant's `custom_components` directory, add the configuration shown in `configuration.example.yaml`, and restart Home Assistant. The YAML configuration creates one integration entry automatically. Reloading the integration rereads YAML secrets. Keep `secrets.yaml` out of source control and protect Home Assistant backups that contain it.
+In HACS, add `https://github.com/nathcymru/ha-metoffice-direct` as a custom repository with category **Integration**, then download Met Office Direct. For manual installation, copy `custom_components/metoffice_direct` into Home Assistant's `custom_components` directory.
+
+Add the configuration shown in `configuration.example.yaml`, provide its `!secret` values privately in Home Assistant's `secrets.yaml`, then restart Home Assistant. Remove example lines for optional products you do not subscribe to; an unresolved `!secret` prevents configuration validation. The YAML configuration creates one integration entry automatically. Reloading the integration rereads YAML secrets. Keep `secrets.yaml` out of source control and protect Home Assistant backups that contain it.
 
 Required subscription: Global Spot. Optional: National Severe Weather Warning Service, Land Observations, Blended Probabilistic Forecast v2, Map Images. Atmospheric credentials can be configured for a later bounded order implementation; no atmospheric model downloads are performed.
 
-HACS repository metadata is included. Repository publication and HACS acceptance are not implied by these files.
+This is a custom HACS repository. Inclusion in the default HACS catalogue is not implied.
 
 ## Weather and sensors
 
@@ -53,6 +55,8 @@ Configure `map_order_id` for a single-parameter total precipitation rate PNG ord
 - `region`: provider region metadata; `bounds`: provider `extent` object when available.
 
 Authenticated clients request `GET /api/metoffice_direct/map/{id}`. The response is a cached PNG; no provider credentials or provider image URLs are sent to the browser. Unknown IDs and stale/unavailable maps return 404. Authentication is enforced by Home Assistant.
+
+[HA-Sky-Canvas](https://github.com/nathcymru/HA-Sky-Canvas) supplies the companion forecast playback card and optional dashboard house scenes.
 
 Only missing images are downloaded. Cache IDs include parameter and geographic metadata, so a changed area cannot reuse an older area's image. A second metadata check after a download batch prevents publishing frames across a provider model-run or geography change. Images persist across restart and are bounded to 64 MiB, 8 MiB per image, and 25 published frames. Refresh is hourly; old unused frames are removed after a successful new set. Viewer count and playback do not cause provider requests.
 

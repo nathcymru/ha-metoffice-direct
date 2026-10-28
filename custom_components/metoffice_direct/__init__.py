@@ -12,6 +12,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.reload import async_integration_yaml_config
 
 from .api import Client, StateStore
+from .capabilities import register_capability_action
 from .const import DOMAIN, ROOTS
 from .coordinator import ProviderCoordinator
 from .maps import MapCoordinator, MapImageView
@@ -45,6 +46,7 @@ class Runtime:
 
 
 async def async_setup(hass, config):
+    register_capability_action(hass)
     data = hass.data.setdefault(DOMAIN, {})
     if not data.get("view_registered"):
         hass.http.register_view(MapImageView())
