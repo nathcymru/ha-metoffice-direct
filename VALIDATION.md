@@ -14,7 +14,11 @@ The test suite emits an upstream aiohttp/Home Assistant application subclass dep
 
 ## Live acceptance checkpoint
 
-The deployment agent confirmed current, hourly, daily and three-hourly Global Spot data, official warning snapshots and nearby station observations after restart. Sanitized authenticated metadata confirmed the UK `uk-spot-percentiles` / `blended` BPF stream and dated precipitation map file identifiers with whole-order timestep sets. The updated production BPF/PNG parser still requires the coordinated acceptance below.
+Live checks on Home Assistant Core 2026.10.4 confirmed current, hourly, daily and three-hourly Global Spot data, official warning snapshots and nearby station observations after restart. All 11 supported BPF physical sensors reported values in their declared units from the advertised `uk-spot-percentiles` / `blended` stream. Its model-run timestamp remains unknown rather than being inferred from fetch time.
+
+The configured precipitation order produced 25 validated hourly PNG frames covering a 24-hour sequence from one model run. The first and last cached images returned authenticated HTTP 200 with distinct content; anonymous requests returned HTTP 401. Playback, pause, next-hour controls, keyboard selection and a phone-size layout were checked in the companion Sky Canvas card. The cache survived a further Core restart without additional map downloads. Full native configuration validation passed with no reported errors or warnings.
+
+These checks validate the tested installation and API shapes, not every subscription, geography, Home Assistant version or future provider change. The following checklist remains applicable to other installations and upgrades.
 
 ## Installation acceptance checklist
 
@@ -26,4 +30,4 @@ The deployment agent confirmed current, hourly, daily and three-hourly Global Sp
 6. Confirm the selected precipitation map order's actual file metadata, each dated file's timestep membership and run agreement, full next-24-hour coverage, projection/bounds and image bytes. Verify authenticated image success and unauthenticated rejection through HA HTTP.
 7. Verify real entity registry IDs, all migrated dashboard consumers, restart/reload recovery, and absence of old-provider references before removing the superseded integrations.
 
-The provider implementation agent did not handle credentials, perform live deployment or publish the repository. Live operations and acceptance are coordinated by the parent and deployment agents; their evidence is kept outside this public repository.
+Private deployment evidence and provider responses are kept outside this public repository. Only synthetic fixtures are distributed. No physical-device actuation or backup restore drill is implied by these integration checks.
